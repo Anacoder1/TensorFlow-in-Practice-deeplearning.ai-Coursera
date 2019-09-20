@@ -11,7 +11,21 @@ Contains notes, codes, anwers to quizzes and exercises of all the 4 courses of t
 
 ➥ [Week 4: Using Real-world Images][4]
 
+## Course 2: Convolutional Neural Networks in TensorFlow
+
+➥ [Week 1: Exploring a Larger Dataset][5]
+
+➥ [Week 2: Augmentation: A technique to avoid overfitting][6]
+
+➥ [Week 3: Transfer Learning][7]
+
+➥ [Week 4: Multiclass Classifications][8]
+
 [1]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%201%20-%20Introduction%20to%20TensorFlow%20for%20AI%2C%20ML%20and%20DL/Week%201
 [2]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%201%20-%20Introduction%20to%20TensorFlow%20for%20AI%2C%20ML%20and%20DL/Week%202
 [3]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%201%20-%20Introduction%20to%20TensorFlow%20for%20AI%2C%20ML%20and%20DL/Week%203
 [4]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%201%20-%20Introduction%20to%20TensorFlow%20for%20AI%2C%20ML%20and%20DL/Week%204
+[5]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%202%20-%20Convolutional%20Neural%20Networks%20in%20TensorFlow/Week%201
+[6]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%202%20-%20Convolutional%20Neural%20Networks%20in%20TensorFlow/Week%202
+[7]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%202%20-%20Convolutional%20Neural%20Networks%20in%20TensorFlow/Week%203
+[8]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%202%20-%20Convolutional%20Neural%20Networks%20in%20TensorFlow/Week%204
