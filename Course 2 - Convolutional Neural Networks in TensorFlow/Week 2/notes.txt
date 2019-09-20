@@ -1,0 +1,62 @@
+## Coding augmentation with ImageDataGenerator
+
+train_datagen = ImageDataGenerator(rescale = 1./255)
+
+train_datagen = ImageDataGenerator(
+    rescale = 1./255,
+    rotation_range = 40,	
+    width_shift_range = 0.2,
+    height_shift_range = 0.2,
+    shear_range = 0.2,
+    zoom_range = 0.2,
+    horizontal_flip = True,
+    fill_mode = 'nearest'
+)
+
+rotation_range = range from 0-180 degrees with which to
+                 randomly rotate images.
+
+Shifting moves the image around inside its frame.
+
+Many pictures have the subjects centered, so if we train
+based on those kind of images, we might overfit
+for that scenario.
+
+These parameters specify as a proportion of the image size,
+how much we should randomly move the subject around.
+
+e.g. offset the image 20% vertically and horizontally, as in the
+example above
+
+
+Shearing = moving images by skewing along x-, y- or z- axes
+           to end up with similar orientations of subjects in images
+           with those of an unseen image.
+
+shear_range will shear the image by random amounts up to the
+specified portion in the image.
+
+e.g. shifting up to 20% of the image, as in the example above
+
+
+zoom_range = helps create new images by zooming in on old ones
+
+0.2 is a relative portion of the image you will zoom in on.
+
+e.g. the zooms will be a random amount up to 20% of the size of the image,
+     as in the example above.
+
+
+horizontal_flip = flips images horizontally
+
+e.g. an image with a woman with her left hand raised,
+     will produce an image an image with the subject's left hand raised,
+     instead of right hand
+
+
+fill_mode = fills in any pixels that might have been
+            lost by the operations 
+
+fill_mode = 'nearest' (uses neighbors of that pixels to try and keep uniformity)
+
+
