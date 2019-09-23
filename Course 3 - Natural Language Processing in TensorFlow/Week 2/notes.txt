@@ -1,0 +1,448 @@
+## The IMDB Dataset
+
+TensorFlow Data Services (TFDS)
+
+imdb_reviews dataset
+
+50000 movie reviews, classified as positive or negative
+
+Authored by Andrew Maas et al., at Standford.
+
+http://ai.stanford.edu/~amaas/data/sentiment/
+------------------------------------------------------------
+
+## Looking into the details
+
+import tensorflow as tf
+print(tf.__version__)
+
+## If the version is < 2.0, you'll need to use
+tf.enable_eager_execution()
+
+## Install TensorFlow datasets in Colab like this
+!pip install -q tensorflow-datasets
+
+
+import tensorflow_datasets as tfds
+imdb, info = tfds.load("imdb_reviews",
+                       with_info = True,
+                       as_supervised = True)
+
+
+--> 25000 samples for training & testing each.
+
+import numpy as np
+
+train_data, test_data = imdb['train'], imdb['test']
+
+
+training_sentences = []
+training_labels = []
+
+testing_sentences = []
+testing_labels = []
+
+# str(s.tonumpy()) is needed in Python3 instead of just s.numpy()
+
+for s, l in train_data:
+    training_sentences.append(str(s.numpy()))
+    training_labels.append(l.numpy())
+
+for s, l in test_data:
+    testing_sentences.append(str(s.numpy()))
+    testing_labels.append(l.numpy())
+
+
+--> A label = 1 indicates a positive review, 0 a negative one
+
+
+training_labels_final = np.array(training_labels)
+testing_labels_final = np.array(testing_labels)
+
+
+vocab_size = 10000
+embedding_dim = 16
+max_length = 120
+trunc_type = 'post'
+oov_tok = "<OOV>"
+
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+tokenizer = Tokenizer(num_words = vocab_size,
+                      oov_token = oov_tok)
+tokenizer.fit_on_texts(training_sentences)
+word_index = tokenizer.word_index
+sequences = tokenizer.texts_to_sequences(training_sentences)
+padded = pad_sequences(sequences,
+                       maxlen = max_length,
+                       truncating = trunc_type)
+
+testing_sequences = tokenizer.texts_to_sequences(testing_sentences)
+testing_padded = pad_sequences(testing_sequences,
+                               maxlen = max_length)
+
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(6, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+--------------------------------------------------------------------------------
+
+## How can we use vectors?
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(6, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+
+--> The result of the embedding will be a 2D array with the length of
+    the sentence and the embedding dimension e.g. 16 as its size
+
+--> Often, in NLP, a layer different than Flatten is used, and this is a
+    Global average pooling 1D
+    The reason for this is the size of the output vector being fed into the Dense.
+
+--> Using Flatten() will give 0 parameters for that layer.
+
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.GlobalAveragePooling1D(),
+    tf.keras.layers.Dense(6, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+
+--> GlobalAveragePooling1D averages across the vector to flatten it out.
+
+--> Using Flatten() is generally slower than GlobalAveragePooling1D().
+------------------------------------------------------------------------------------------------
+
+## More into the details
+
+model.compile(loss = 'binary_crossentropy',
+              optimizer = 'adam',
+              metrics = ['accuracy'])
+model.summary()
+
+
+num_epochs = 10
+model.fit(padded, training_labels_final,
+          epochs = num_epochs,
+          validation_data = (testing_padded, testing_labels_final))
+
+
+e = model.layers[0]
+weights = e.get_weights()[0]
+print(weights.shape)  ## shape: (vocab_size, embedding_dim)
+
+(10000, 16)
+
+
+--> 10000 words in the corpus, and we're working in a 16-dimensional array
+
+
+reverse_word_index = dict([(value, key) for (key, value) in word_index.items()])
+
+
+import io
+
+out_v = io.open('vecs.tsv', 'w', encoding = 'utf-8')
+out_m = io.open('meta.tsv', 'w', encoding = 'utf-8')
+for word_num in range(1, vocab_size):
+    word = reverse_word_index[word_num]
+    embeddings = weights[word_num]
+    out_m.write(word + "\n")
+    out_v.write('\t'.join([str(x) for x in embeddings]) + "\n")
+out_v.close()
+out_m.close()
+
+
+--> To the vectors, we simply write out the value of each of the items
+    in the array of embeddings i.e. the coefficient of each dimension
+    on the vector for this word.
+
+--> To the metadata array, we just write out the words.
+
+
+try:
+    from google.colab import files
+except ImportError:
+    pass
+else:
+    files.download('vecs.tsv')
+    files.download('meta.tsv')
+-------------------------------------------------------------------------------
+
+## Remember the sarcasm dataset?
+
+import json
+import tensorflow as tf
+
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+
+vocab_size = 10000
+embedding_dim = 16
+max_length = 32
+trunc_type = 'post'
+padding_type = 'post'
+oov_tok = "<OOV>"
+training_size = 20000
+
+(The dataset has about 27000 records, we'll train on 20k, and validate
+ on the rest)
+
+
+!wget --no-check-certificate \
+    https://storage.googleapis.com/laurencemoroney-blog.appspot.com/sarcasm.json \
+   -O /tmp/sarcasm.json
+
+
+with open("/tmp/sarcasm.json", 'r') as f:
+    datastore = json.load(f)
+
+sentences = []
+labels = []
+
+for item in datastore:
+    sentences.append(item['headline'])
+    labels.append(item['is_sarcastic'])
+--------------------------------------------------------------------------------------
+
+## Building a classifer for the sarcasm dataset
+
+training_sentences = sentences[0:training_size]
+testing_sentences = sentences[training_size:]
+
+training_labels = labels[0:training_size]
+testing_labels = labels[training_size:]
+
+
+tokenizer = Tokenizer(num_words = vocab_size,
+                      oov_token = oov_tok)
+tokenizer.fit_on_texts(training_sentences)
+
+word_index = tokenizer.word_index
+
+training_sequences = tokenizer.texts_to_sequences(training_sentences)
+training_padded = pad_sequences(training_sequences, maxlen = max_length,
+                                padding = padding_type, truncating = trunc_type)
+
+testing_sequences = tokenizer.texts_to_sequences(testing_sentences)
+testing_padded = pad_sequences(testing_sequences, maxlen = max_length,
+                               padding = padding_type, truncating = trunc_type)
+
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.GlobalAveragePooling1D(),
+    tf.keras.layers.Dense(24, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+
+model.compile(loss = 'binary_crossentropy',
+              optimizer = 'adam',
+              metrics = ['accuracy'])
+
+
+model.summary()
+
+
+num_epochs = 30
+
+history = model.fit(training_padded, training_labels,
+                    epochs = num_epochs,
+                    validation_data = (testing_padded, testing_labels),
+                    verbose = 2)
+
+
+import matplotlib.pyplot as plt
+
+def plot_graphs(history, string):
+    plt.plot(history.history[string])
+    plt.plot(history.history['val_' + string])
+    plt.xlabel("Epochs")
+    plt.ylabel(string)
+    plt.legend([string, 'val_' + string])
+    plt.show()
+
+plot_graphs(history, "acc")
+plot_graphs(history, "loss")
+
+
+--> Training accuracy converges to 100% by the end of training, while validation
+    accuracy peaks out around 80%
+
+--> The training loss falls as training goes on, but validation loss steadily goes
+    on increasing.
+------------------------------------------------------------------------------
+
+## Let's talk about the loss function
+
+vocab_size = 1000   (was 10,000)
+embedding_dim = 16
+max_length = 16     (was 32)
+trunc_type = 'post'
+padding_type = 'post'
+oov_tok = "<OOV>"
+training_size = 20000
+
+
+--> Using above hyperparameters, we see that the validation_loss gets flattened out
+
+--> But the accuracy is still around 82%
+
+
+vocab_size = 1000   (was 10,000)
+embedding_dim = 32  (was 16)
+max_length = 16     (was 32)
+trunc_type = 'post'
+padding_type = 'post'
+oov_tok = "<OOV>"
+training_size = 20000
+
+
+--> Using above hyperparameters has very little difference
+-------------------------------------------------------------------------------------
+
+## Pre-tokenized datasets
+
+A version of imdb_reviews dataset which is pre-tokenized exists,
+but here the tokenization has been done on sub-words.
+-----------------------------------------------------------------------------
+
+
+## Diving into the code (part 1)
+
+https://github.com/tensorflow/datasets/tree/master/docs
+
+https://github.com/tensorflow/datasets/blob/master/docs/catalog/imdb_reviews.md
+
+
+imdb_reviews is configured with tfds.text.imdb.IMDBReviewsConfig and has the following
+configurations predefined (defaults to the first one):
+
+  a) plain_text (v0.1.0) (Size: 80.23 MiB): Plain text
+
+  b) bytes (v0.1.0) (Size: 80.23 MiB): Uses byte-level text encoding with tfds.features.text.ByteTextEncoder
+
+  c) subwords8k (v0.1.0) (Size: 80.23 MiB): Uses tfds.features.text.SubwordTextEncoder with 8k vocab size
+
+  d) subwords32k (v0.1.0) (Size: 80.23 MiB): Uses tfds.features.text.SubwordTextEncoder with 32k vocab size
+
+
+import tensorflow as tf
+print(tf.__version__)
+
+!pip install tensorflow==2.0.0-alpha0
+
+
+import tensorflow_datasets as tfds
+imdb, info = tfds.load("imdb_reviews/subwords8k", 
+                       with_info = True,
+                       as_supervised = True)
+
+
+train_data, test_data = imdb['train'], imdb['test']
+
+
+tokenizer = info.features['text'].encoder
+
+(Refer https://www.tensorflow.org/datasets/api_docs/python/tfds/features/text/SubwordTextEncoder)
+-------------------------------------------------------------------------------------------------------------------
+
+## Diving into the code (Part 2)
+
+--> Inspecting the vocabulary of the pre-trained subwords tokenizer
+
+print(tokenizer.subwords)
+
+['the_', ', ', '. ', 'a_', 'and_', 'of_', 'to_', 's_', 'is_',
+ 'br', 'in_', 'I_', 'that_', 'this_', 'it_', ...]
+
+
+sample_string = 'TensorFlow, from basics to mastery'
+
+tokenized_string = tokenizer.encode(sample_string)
+print('Tokenized string is {}'.format(tokenized_string))
+
+original_string = tokenizer.decode(tokenized_string)
+print('The original string: {}'.format(original_string))
+
+
+Output:
+Tokenized string is [6307, 2327, 4043, 2120, 2, 48, 4249, 4429, 7, 2652, 8050[
+
+The original string: TensorFlow, from basics to mastery
+
+
+for ts in tokenized_string:
+    print('{} ----> {}'.format(ts, tokenizer.decode([ts])))
+
+
+Output:
+6307 ----> Ten
+2327 ----> sor
+4043 ----> Fl
+2120 ----> ow
+2 ----> ,
+48 ----> from
+4249 ----> basi
+4429 ----> cs
+7 ----> to
+2652 ----> master
+8050 ----> y
+
+
+--> NOTE that here, it's case sensitive and punctuation is maintained
+
+
+embedding_dim = 64
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(tokenizer.vocab_size,
+                              embedding_dim),
+    tf.keras.layers.GlobalAveragePooling1D(),
+    tf.keras.layers.Dense(6, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+model.summary()
+
+
+num_epochs = 10
+
+model.compile(loss = 'binary_crossentropy',
+              optimizer = 'adam',
+              metrics = ['accuracy'])
+
+history = model.fit(train_data,
+                    epochs = num_epochs,
+                    validation_data = test_data)
+
+
+import matplotlib.pyplot as plt
+
+def plot_graphs(history, string):
+    plt.plot(history.history[string])
+    plt.plot(history.history['val_' + string])
+    plt.xlabel("Epochs")
+    plt.ylabel(string)
+    plt.legend([string, 'val_' + string])
+    plt.show()
+
+plot_graphs(history, "acc")
+plot_graphs(history, "loss")
+
+

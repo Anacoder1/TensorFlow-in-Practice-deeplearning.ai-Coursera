@@ -1,0 +1,271 @@
+## Introduction
+
+Refer https://www.coursera.org/lecture/nlp-sequence-models/deep-rnns-ehs0S
+---------------------------------------------------------------------------------
+
+## LSTMs
+
+Refer https://www.coursera.org/lecture/nlp-sequence-models/long-short-term-memory-lstm-KXoay
+---------------------------------------------------------------------------------------------
+
+## Implementing LSTMs in code
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(tokenizer.vocab_size, 64),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64)),
+    tf.keras.layers.Dense(64, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+LSTM(64) --> 64 = no. of outputs desired from the LSTM layer
+
+
+--> When viewing the model summary, the output for the Bidirectional layer
+    will be 128, because it doubles up 64.
+
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(tokenizer.vocab_size, 64),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64, return_sequences = True)),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32)),
+    tf.keras.layers.Dense(64, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+
+--> LSTMs can be stacked just like other layers.
+
+--> When you feed an LSTM into another one, you have to put the
+    return_sequences = True parameter into the first one
+
+    This ensures that the output of the LSTM matches the desired inputs 
+    of the next one.
+-------------------------------------------------------------------------------------------
+
+## Accuracy and loss
+
+--> Training a one layer LSTM and two layer LSTM over the model covered last week (sub-word tokenization)
+    has a few differences. Both are trained for 10 epochs.
+
+    In the 2 layer one, the validation_accuracy curve doesn't show a nosedive as in the 1 layer one.
+
+    The training curve is smoother for the 2 layer LSTM.
+
+
+--> Jaggedness (in the accuracy curve) is an indication that your model needs improvement.
+
+
+--> When both these networks are trained for 50 epochs,
+    the accuracy curve of the 1 layer LSTM shows some pretty sharp dips.
+
+    The 2 layer LSTM model has a much smoother curve here too.
+
+
+--> In the loss curves, it's desired that the loss flattens out in later epochs.
+------------------------------------------------------------------------------------------------------------
+
+## Looking into the code
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.GlobalAveragePooling1D(),
+    tf.keras.layers.Dense(24, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32)),
+    tf.keras.layers.Dense(24, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+
+--> When both the above models are trained on the sarcasm dataset
+    the model without LSTM showed a max accuracy flattened at 85%
+    and the validation accuracy curve showed sync with the accuracy one,
+    and it flattened out at 80%.
+
+    In the LSTM model, the accuracy quickly reached a max of 97.5% within
+    50 epochs.
+    The validation accuracy dropped slowly, but it was still close to the values
+    observed in the sans-LSTM model.
+
+    Still, the drop indicates overfitting.
+
+
+--> The loss values from the non-LSTM model got to a healthy state quite quickly
+    and then flattened out.
+
+    With the LSTM, the training loss dropped nicely, but the validation one 
+    increased as training was continued.
+
+    Again, this shows some overfitting in the LSTM network
+    The accuracy of the prediction increased, but the confidence in it decreased.
+----------------------------------------------------------------------------------------
+
+## Using a convolutional network
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.Conv1D(128, 5, activation = 'relu'),
+    tf.keras.layers.GlobalMaxPooling1D(),
+    tf.keras.layers.Dense(24, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+
+--> A 128 filters each for 5 words
+
+--> Now, words will be grouped to the size of the filter (5, here),
+    and convolutions will be learned that can map the word classification to
+    the desired output.
+
+
+--> Training with the network above, we get a 100% accuracy, and 80% validation accuracy.
+
+    But as before, our loss increases in the validation set, indicating potential overfitting.
+
+
+max_length = 120
+
+tf.keras.layers.Conv1D(128, 5, activation = 'relu')
+
+
+--> As the size of the input was 120 words, and a filter that is 5 words long
+    will shave off 2 words from the front and back, leaving us with 116.
+-------------------------------------------------------------------------------------------------------
+
+## Going back to the IMDB dataset
+
+imdb, info = tfds.load("imdb_reviews",
+                       with_info = True,
+                       as_supervised = True)
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(6, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+model.compile(loss = 'binary_crossentropy',
+              optimizer = 'adam',
+              metrics = ['accuracy'])
+
+model.summary()
+
+
+--> Using this model with the IMDB reviews dataset gives nice accuracy,
+    but clear overfitting but it only takes about 5 seconds per epoch to train.
+
+    Total params: 171, 533
+
+
+imdb, info = tfds.load("imdb_reviews", 
+                       with_info = True,
+                       as_supervised = True)
+
+# Model Definition with LSTM
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32)),
+    tf.keras.layers.Dense(6, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+model.compile(loss = 'binary_crossentropy',
+              optimizer = 'adam',
+              metrics = ['accuracy'])
+
+model.summary()
+
+
+--> Training the above LSTM model with IMDB reviews dataset, we'll
+    have only 30,129 parameters, but it will take about 43 seconds per
+    epoch.
+
+    The accuracy is better, but there's still some overfitting.
+
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.Bidirectional(tf.keras.layers.GRU(32)),
+    tf.keras.layers.Dense(6, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+model.compile(loss = 'binary_crossentropy',
+              optimizer = 'adam',
+              metrics = ['accuracy'])
+
+model.summary()
+
+
+--> Training the above network with the same dataset, we'll have
+    169,997 parameters, the training time will fall to 20 seconds per epoch.
+
+    But here the accuracy is again very good on training, not too bad on validation,
+    but again, showing some overfitting.
+
+
+# Model Definition with Conv1D
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim,
+                              input_length = max_length),
+    tf.keras.layers.Conv1D(128, 5, activation = 'relu'),
+    tf.keras.layers.GlobalAveragePooling1D(),
+    tf.keras.layers.Dense(6, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
+
+model.compile(loss = 'binary_crossentropy',
+              optimizer = 'adam',
+              metrics = ['accuracy'])
+
+model.summary()
+
+
+--> Training with the above model on the same dataset, we'll have
+    171,149 parameters, and it only takes 6 seconds per epoch to get
+    close to 100% accuracy on training, and about 83% on validation,
+    but again with overfitting.
+------------------------------------------------------------------------------------------
+
+
+## Exploring different sequence models
+
+Lesson 1a - IMDB Subwords 8K with Single Layer LSTM
+
+Lesson 1b - IMDB Subwords 8K with Multi Layer LSTM
+
+Lesson 1c - IMDB Subwords 8K with 1D Convolutional Layer
+
+Lesson 2 - Sarcasm with Bidirectional LSTM
+
+Lesson 2c - Sarcasm with 1D Convolutional Layer
+
+Lesson 2d - IMDB Reviews with GRU (and optional LSTM & Conv1D)
+-------------------------------------------------------------------------
+
+## Exercise 3
+
+Dataset: https://www.kaggle.com/kazanova/sentiment140
+
+GloVe: https://nlp.stanford.edu/projects/glove/
+
+
+
+
+
+
+
+

@@ -1,0 +1,299 @@
+## Looking into the code
+
+Traditional Irish song:
+
+In the town of Athy one Jeremy Lanigan
+Battered away til he hadnt a pound.
+His father died and made him a man again
+Left him a farm and ten acres of ground....
+
+
+Code to process it:
+
+tokenizer = Tokenizer()
+
+data = "In the town of Athy one Jeremy Lanigan \n Battered away..."
+corpus = data.lower().split("\n")
+
+tokenizer.fit_on_texts(corpus)
+total_words = len(tokenizer.word_index) + 1
+
+
+--> One was added to total_words to consider out-of-vocabulary words
+
+
+## Training the data
+
+input_sequences = []
+for line in corpus:
+    token_list = tokenizer.texts_to_sequences([line])[0]
+    for i in range(1, len(token_list)):
+        n_gram_sequence = token_list[:i+1]
+        input_sequences.append(n_gram_sequence)
+
+
+--> The training X's will be called input_sequences (Python list)
+
+    For each line in the corpus, we'll generate a token list using the tokenizer's,
+    texts_to_sequences method.
+   
+    This will convert a line of text like this:
+
+    In the town of Athy one Jeremy Lanigan ==> [4 2 66 8 67 68 69 70]
+
+
+    Then we'll iterate over this list of tokens and create a number of
+    n-grams sequences, namely the first 2 words in the sentence are one sentence,
+    then the first three are another sequence, etc.
+
+    
+    The result? For the first line of the song, the following input sequences will be generated:
+
+    Line:			Input Sequences:
+
+    [4 2 66 8 67 68 69 70]      [4 2]
+				[4 2 66] 
+				[4 2 66 8]
+  				[4 2 66 8 67]
+				[4 2 66 8 67 68]
+				[4 2 66 8 67 68 69]
+				[4 2 66 8 67 68 69 70]
+
+
+    This will happen for every sentence in the data
+
+
+--> Next, we need to find the length of the longest sentence in the corpus, using this:
+
+    max_sequence_len = max([len(x) for x in input_sequences])
+
+
+--> Once we have the length of the longest sequence, next we'll pad all sequences
+    so that they are the same length.
+
+   input_sequences = 
+       np.array(pad_sequences(input_sequences,
+			      maxlen = max_sequence_len,
+			      padding = 'pre'))
+
+    We will pre-pad with zeros to make it easier to extract the label
+
+
+    Line:			Padded Input Sequences:
+  
+    [4 2 66 8 67 68 69 70]      [0 0 0 0 0 0 0 0 0 0 4 2]
+				[0 0 0 0 0 0 0 0 0 4 2 66]
+				[0 0 0 0 0 0 0 0 4 2 66 8]
+				[0 0 0 0 0 0 0 4 2 66 8 67]
+				[0 0 0 0 0 0 4 2 66 8 67 68]
+				[0 0 0 0 0 4 2 66 8 67 68 69]
+				[0 0 0 0 4 2 66 8 67 68 69 70] 
+
+
+---> Now that we have our padded sequences, we'll turn them into X's and Y's - 
+     our input values and their labels
+
+     We have to take all but the last character as X, and the last character as Y, or label
+-------------------------------------------------------------------------------------------------------
+
+
+## More on training the data
+
+-->  Now we have to split our sequences into our X's and Y's.
+
+
+xs = input_sequences[:, :-1]
+labels = input_sequences[:, -1]
+
+
+--> Now we should one-hot encode the labels as this really is a classification problem,
+    where given a sequence of words, we can classify from the corpus what the next word would
+    likely be.
+
+
+ys = tf.keras.utils.to_categorical(labels, num_classes = total_words)
+
+
+Sentence: [0 0 0 0 4 2 66 8 67 68 69 70]
+
+X: [0 0 0 0 4 2 66 8 67 68 69]
+
+Label: [70]
+
+Y: [0. 0. .... 1. 0. 0. ...]
+
+
+The Y is a one-hot encoded array where the length is the size of the corpus of words
+and the value that is set to one is the one at the index of the label, which in this
+case is the 70th element.
+--------------------------------------------------------------------------------------------------
+
+
+## Finding what the next word should be
+
+model = Sequential()
+model.add(Embedding(total_words, 64, 
+                    input_length = max_sequence_len - 1))
+model.add((LSTM(20)))
+model.add(Dense(total_words, activation = 'softmax'))
+
+model.compile(loss = 'categorical_crossentropy',
+              optimizer = 'adam',
+              metrics = ['accuracy'])
+
+model.fit(xs, ys, 
+          epochs = 500,
+          verbose = 2)
+
+
+--> We subtract 1 off the input_length because we cropped off the last word of
+    each sequence to get the label
+
+--> The Dense layer has 1 neuron per word
+--------------------------------------------------------------------------------------------
+
+
+## Example
+
+--> With the model trained above, when we asked to predict the next 10 words for the phrase
+    "Laurence went to Dublin", a lot of the last 5-6 words were getting repeated.
+
+    This is because the LSTM was only taking the forward context. Let's use Bidirectional now.
+
+
+model = Sequential()
+model.add(Embedding(total_words, 64, 
+                    input_length = max_sequence_len - 1))
+model.add(Bidirectional(LSTM(20)))
+model.add(Dense(total_words, activation = 'softmax'))
+
+model.compile(loss = 'categorical_crossentropy',
+              optimizer = 'adam',
+              metrics = ['accuracy'])
+
+model.fit(xs, ys, 
+          epochs = 500,
+          verbose = 2)
+
+
+--> Using this code, we observe that we do converge a bit quicker than earlier.
+
+--> The predictions obtained using this model make a little more sense, but there are still repetitions.
+-----------------------------------------------------------------------------------------------------------------
+
+
+## Predicting a word
+
+seed is the sentence "Laurence went to dublin"
+
+We want to predict the next 10 words following 'dublin'..
+
+
+token_list = tokenizer.texts_to_sequences([seed_text])[0]
+
+
+Output:
+Laurence went to dublin ==>  [134, 13, 59]  (Laurence gets ignored)
+
+
+--> The code below will then pad the sequence, so it matches the ones in the
+    training set.
+
+token_list = pad_sequences([token_list],
+                           maxlen = max_sequence_len - 1,
+                           padding = 'pre')
+
+
+We end up with something like this: [0 0 0 0 0 0 0 134 13 59]
+which we can pass to the model to get a prediction back
+
+
+predicted = model.predict_classes(token_list, verbose = 0)
+
+
+This will give us the token of the word most likely to be the next
+one in the sequence.
+
+
+--> Now we can do a reverse lookup on the word index items to turn the token
+    back into a word and to add that to our seed texts, and that's it
+
+for word, index in tokenizer.word_index.items():
+    if index == predicted:
+        output_word = word
+        break
+seed_text += " " + output_word
+
+
+--> Below is the complete code to do that 10 times
+
+seed_text = "Laurence went to dublin"
+next_words = 10
+
+for _ in range(next_words):
+  token_list = tokenizer.texts_to_sequences([seed_text])[0]
+  token_list = pad_sequences([token_list],
+                             maxlen = max_sequence_len - 1,
+                             padding = 'pre')
+  predicted = model.predict_classes(token_list, verbose = 0)
+  output_word = ""
+  for word, index in tokenizer.word_index.items():
+    if index == predicted:
+      output_word = word
+      break
+  seed_text += " " + output_word
+print(seed_text)
+
+
+--> Do know that the more words you try to predict, the more likely
+    you are going to get gibberish.
+---------------------------------------------------------------------------
+
+
+## Poetry!
+
+!wget --no-check-certificate \
+    https://storage.googleapis.com/laurencemoroney-blog.appspot.com/irish-lyrics-eof.txt \
+    -O /tmp/irish-lyrics-eof.txt
+
+Above file has a lot of songs, having 1692 sentences in all. 
+-------------------------------------------------------------------------------------------
+
+
+## Looking into the code
+
+data = open('/tmp/irish-lyrics-eof.txt').read()
+
+model = Sequential()
+model.add(Embedding(total_words, 100, 
+                    input_length = max_sequence_len - 1))
+model.add(Bidirectional(LSTM(150)))
+model.add(Dense(total_words, activation = 'softmax'))
+
+adam = Adam(lr = 0.01)
+model.compile(loss = 'categorical_crossentropy',
+              optimizer = adam,
+              metrics = ['accuracy'])
+
+history = model.fit(xs, ys,
+                    epochs = 100,
+                    verbose = 1)
+
+1) You can experiment with the dimensionality of the embedding (100, here)
+
+2) You can play with the number of LSTN units (150, here)
+   You can also try removing the 'Bidirectional', so that your words only have forward meaning.
+
+3) The biggest impact is on the optimizer. Try playing with the learning rate of the
+   Adam optimizer
+
+4) The more the number of epochs, the better (generally) but eventually
+   you'll hit the law of diminishing returns.
+-------------------------------------------------------------------------------------------------------
+
+
+## Your next task
+
+https://www.tensorflow.org/tutorials/sequences/text_generation
+
+The above workbook depicts character-based text prediction

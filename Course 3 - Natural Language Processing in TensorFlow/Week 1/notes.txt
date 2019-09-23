@@ -1,0 +1,259 @@
+## Using APIs
+
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.preprocessing.text import Tokenizer
+
+sentences = [
+  'I love my dog',
+  'I love my cat'
+]
+
+tokenizer = Tokenizer(num_words = 100)
+tokenizer.fit_on_texts(sentences)
+word_index = tokenizer.word_index
+print(word_index)
+
+Output:
+{'i' : 1, 'my' : 3, 'dog' : 4, 'cat' : 5, 'love' : 2}
+
+
+--> The tokenizer strips punctuation out ('I' was changed to 'i')
+--> num_words parameter takes 'num_words' number of unique words based on volume
+    and encodes them
+--> fit_on_texts creates a dictionary with the key being the word and the value
+    being the token for that word.
+
+
+sentences = [
+  'I love my dog',
+  'I love my cat',
+  'You love my dog!'
+]
+
+Output:
+{'i' : 3, 'my' : 2, 'you' : 6, 'love' : 1, 'cat' : 5, 'dog' : 4}
+-----------------------------------------------------------------
+
+## Text to sequence
+
+from tensorflow.keras.preprocessing.text import Tokenizer
+
+sentences = [
+  'I love my dog',
+  'I love my cat',
+  'You love my dog!',
+  'Do you think my dog is amazing?'
+]
+
+tokenizer = Tokenizer(num_words = 100)
+tokenizer.fit_on_texts(sentences)
+word_index = tokenizer.word_index
+
+sequences = tokenizer.texts_to_sequences(sentences)
+
+print(word_index)
+print(sequences)
+
+
+Output:
+{'amazing' : 10, 'dog' : 3, 'you' : 5, 'cat' : 6,
+ 'think' : 8, 'i' : 4, 'is' : 9, 'my' : 1,
+ 'do' : 7, 'love' : 2}
+
+[[4, 2, 1, 3], [4, 2, 1, 6], [5, 2, 1, 3], 
+ [7, 5, 8, 1, 3, 9, 10]]
+
+
+test_data = [
+  'i really love my dog',
+  'my dog loves my manatee'
+]
+
+test_seq = tokenizer.texts_to_sequences(test_data)
+print(test_seq)
+
+
+Output:
+[[4, 2, 1, 3], [1, 3, 1]]
+
+Word dictionary for reference:
+
+{'amazing' : 10, 'dog' : 3, 'you' : 5, 'cat' : 6,
+ 'think' : 8, 'i' : 4, 'is' : 9, 'my' : 1,
+ 'do' : 7, 'love' : 2}
+---------------------------------------------------------------
+
+## Looking more at the Tokenizer
+
+from tensorflow.keras.preprocessing.text import Tokenizer
+
+sentences = [
+  'I love my dog',
+  'I love my cat',
+  'You love my dog!',
+  'Do you think my dog is amazing?'
+]
+
+tokenizer = Tokenizer(num_words = 100, oov_token = "<OOV>")
+tokenizer.fit_on_texts(sentences)
+word_index = tokenizer.word_index
+
+sequences = tokenizer.texts_to_sequences(sentences)
+
+test_data = [
+  'i really love my dog',
+  'my dog loves my manatee'
+]
+
+test_seq = tokenizer.texts_to_sequences(test_data)
+print(test_seq)
+
+
+Output:
+[[5, 1, 3, 2, 4], [2, 4, 1, 2, 1]]
+
+{'think' : 9, 'amazing' : 11, 'dog' : 4, 'do' : 8,
+ 'i' : 5, 'cat' : 7, 'you' : 6, 'love' : 3,
+ '<OOV>' : 1, 'my' : 2, 'is' : 10}
+-------------------------------------------------------------------------
+
+## Padding
+
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+sentences = [
+  'I love my dog',
+  'I love my cat',
+  'You love my dog!',
+  'Do yo think my dog is amazing?'
+]
+
+tokenizer = Tokenizer(num_words = 100, oov_token = "<OOV>")
+tokenizer.fit_on_texts(sentences)
+word_index = tokenizer.word_index
+
+sequences = tokenizer.texts_to_sequences(sentences)
+
+padded = pad_sequences(sequences)
+print(word_index)
+print(sequences)
+print(padded)
+
+
+Output:
+{'do' : 8, 'you' : 6, 'love' : 3, 'i' : 5,
+ 'amazing' : 11, 'my' : 2, 'is' : 10, 'think' : 9,
+ 'dog' : 4, '<OOV>' : 1, 'cat' : 7}
+
+[[5, 3, 2, 4], [5, 3, 2, 7], [6, 3, 2, 4],
+ [8, 6, 9, 2, 4, 10, 11]]
+
+[[0 0 0 5 3 2 4]
+ [0 0 0 5 3 2 7]
+ [0 0 0 6 3 2 4]
+ [8 6 9 2 4 10 11]]
+
+
+padded = pad_sequences(sequences, padding = 'post')
+
+--> padding = 'post' will change the padding to be after the sentence
+
+
+padded = pad_sequences(sequences, padding = 'post', maxlen = 5)
+
+--> Each row in the matrix usually has the length of the longest sentence.
+    That can be overridden with the 'maxlen' parameter.
+    In sentences having length longer than 'maxlen', the information is lost
+    (by default) from the beginning of the sentence.
+
+--> To override this, we can use the 'truncating' parameter, so that info
+    will be lost from the end of the sentence.
+
+
+padded = pad_sequences(sequences, padding = 'post',
+                       truncating = 'post', maxlen = 5)
+-----------------------------------------------------------------------------------------
+
+## Notebook for lesson 2
+
+Check Week 1 files.
+-----------------------------------------------------------------------------------------
+
+## Sarcasm, really?
+
+Sarcasm in News Headlines Dataset by Rishabh Misra
+
+https://rishabhmisra.github.io/publications/
+
+
+3 elements of this dataset:
+
+1) is_sarcastic = 1 if the record is sarcastic, 0 otherwise
+
+2) headline = the headline of the news article, in plain text
+
+3) article_link = link to the original news article.
+                  Useful in collecting supplementary data
+
+
+import json
+
+with open("sarcasm.json", 'r') as f:
+  datastore = json.load(f)
+
+sentences = []
+labels = []
+urls = []
+
+for item in datastore:
+    sentences.append(item['headline'])
+    labels.append(item['is_sarcastic'])
+    urls.append(item['article_link'])
+------------------------------------------------------------------------
+
+## Working with the Tokenizer
+
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+tokenizer = Tokenizer(oov_token = "<OOV>")
+tokenizer.fit_on_texts(sentences)
+word_index = tokenizer.word_index
+
+sequences = tokenizer.texts_to_sequences(sentences)
+padded = pad_sequences(sequences, padding = 'post')
+print(padded[0])
+print(padded.shape)
+
+
+{'underwood' : 24127, 'skillingsbolle' : 23055,
+ 'grabs' : 12293, 'mobility' : 8909, 
+ "'assassin's" : 12648, 'visualize' : 23973,
+ 'hurting' : 4992, 'orphaned' : 9173,
+ "'agreed'" : 24365, 'narration' : 28470
+
+
+Output:
+[ 308 15115 679 3337 2298 48 382 2576 15116 6 2577 8434
+    0     0   0    0    0  0   0    0     0 0    0     0
+    0     0   0    0    0  0   0    0     0 0    0     0
+    0     0   0    0]
+
+(26709, 40)
+
+--> 26709 sentences, 40 being the length of the longest one
+--------------------------------------------------------------------
+
+## Notebook for Lesson 3
+
+Check Week 1 files.
+-------------------------------------------------------------
+
+Exercise 1
+
+BBC text archive = http://mlg.ucd.ie/datasets/bbc.html
+
+Stopwords = https://github.com/Yoast/YoastSEO.js/blob/develop/src/config/stopwords.js
+
