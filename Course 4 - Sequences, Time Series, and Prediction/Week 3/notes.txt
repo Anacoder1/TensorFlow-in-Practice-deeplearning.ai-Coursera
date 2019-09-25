@@ -1,0 +1,357 @@
+## Conceptual overview
+
+One difference will be that the full input shape when
+using RNNs is three-dimensional.
+
+The first dimension will be the batch size, the second
+will be the time steps and the third is the dimensionality
+of the inputs at each time step.
+
+For e.g., if it's a univariate time series, this value will be 1.
+          For multivariate, it will be more.
+
+
+The location of a word in a sentence can determine its semantics,
+similarly for numeric series, things such as closer numbers in the series
+might have a greater impact than those further away from our target value.
+-------------------------------------------------------------------------------------
+
+
+## Shape of the inputs to the RNN
+
+If we have a window size of 30 timestamps and we're batching them
+in sizes of 4, the shape will be 4 x 30 x 1.
+
+At each timestep, the memory cell input will be a 4 x 1 matrix.
+
+The cell will also take the input of the state matrix from the previous step.
+For the first step, it will be 0.
+For the subsequent ones, it will be the output from the memory cell.
+
+Other than the state vector, the cell of course will output a Y value.
+
+
+If the memory cell is comprised of 3 neurons, then the output matrix
+will be 4 x 3 because the batch size coming was 4 and the no. of
+neurons is 3.
+
+So the full output of the layer is 3-dimensional,
+in this case 4 x 30 x 3.
+
+4 = batch size
+3 = number of units
+30 = no. of overall steps.
+
+
+In a simple RNN, the state matrix (H) is simply a copy of the output value (Y)
+
+So at each timestamp, the memory cell gets both the current input
+and also the previous output.
+
+
+Now, in some cases, you might want to input a sequence,
+but you don't want to output them and you just want to get a single
+vector for each instance in the batch.
+
+This is typically called ==> a sequence to vector RNN
+
+But in reality, all you do is ignore all of the outputs,
+except the last one.
+
+In Keras and TensorFlow, this is the default behavior,
+so if you want the recurrent layer to output a sequence,
+you have to specify return_sequences = True, when creating the layer.
+
+You'll need to do this when stacking one RNN layer on top of another.
+----------------------------------------------------------------------------------
+
+
+## Outputting a sequence
+
+model = keras.models.Sequential([
+    keras.layers.SimpleRNN(20, return_sequences = True,
+                           input_shape = [None, 1]),
+    keras.layers.SimpleRNN(20),
+    keras.layers.Dense(1)
+])
+
+
+TensorFlow assumes that the first dimension is the batch size, and that
+it can have any size at all, so you don't need to define it.
+
+The next dimension is the number of timesteps which here is None,
+which means that the RNN can handle sequences of any length.
+
+The last dimension is just 1 because we're using a univariate time series.
+
+
+model = keras.models.Sequential([
+    keras.layers.SimpleRNN(20, return_sequences = True,
+                           input_shape = [None, 1]),
+    keras.layers.SimpleRNN(20, return_sequenes = True),
+    keras.layers.Dense(1)
+])
+
+
+If we set return_sequences for all RNN layers to be True, they will all
+output sequences and the dense layer will get a sequence as its inputs.
+
+Keras handles this by using the same dense layer independently at each time stamp.
+
+It might look like multiple ones here, but it's the same one that's being
+reused at each time step.
+
+This gives us what is called ==> a sequence to sequence RNN.
+
+It's fed a batch of sequences and it returns a batch of
+sequences of the same length.
+
+
+The dimensionality may not always match.
+
+It depends on the no. of units in the memory cell.
+
+
+Let's return to the first model, where the 2nd recurrent layer didn't
+output a sequence.
+--------------------------------------------------------------------------------------
+
+
+## Lambda layers
+
+Lambda layer is a type of layer that allows us to perform arbitrary operations to
+effectively expand the functionality of TensorFlow's Keras, and we can do this
+within the model definition itself.
+
+
+model = keras.models.Sequential([
+    keras.layers.Lambda(lambda x: tf.expand_dims(x, axis = -1),
+                        input_shape = [None]),
+    keras.layers.SimpleRNN(20, return_sequences = True),
+    keras.layers.SimpleRNN(20),
+    keras.layers.Dense(1),
+    keras.layers.Lambda(lambda x: x * 100.0)
+])
+
+
+The first Lambda layer is used to help us with our dimensionality.
+
+When we wrote the windowed_dataset helper function, it returned
+2-dimensional batches of windows on the data - 
+the first being the batch_size, and
+the second the number of timesteps.
+
+But an RNN expects 3 dimensions - batch_size, no. of time steps
+and the series dimensionality.
+
+With the Lambda layer, we can fix this without rewriting the
+windowed_dataset helper function.
+
+Using the Lambda, we just expand the array by one dimension.
+
+
+By setting input_shape = None, we're saying that the model can take
+sequences of any length.
+
+Similarly, if we scale up the outputs by 100, we can help training.
+
+The default activation function in RNN layers is "tanh".
+This outputs values b/w -1 and 1.
+
+
+Since the time series values are in that order, usually in the 10s
+like 40s, 50s, etc., then scaling the outputs to the same ballpark
+can help us with learning.
+
+We can do that with a Lambda layer too - we just simply multiply that
+by a 100.
+-----------------------------------------------------------------------------
+
+
+## Adjusting the learning rate dynamically
+
+train_set = windowed_dataset(x_train, window_size, batch_size = 128,
+                             shuffle_buffer = shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, axis = -1),
+                           input_shape = [None]),
+    tf.keras.layers.SimpleRNN(40, return_sequences = True),
+    tf.keras.layers.SimpleRNN(40),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 100.0)
+])
+
+lr_schedule = tf.keras.callbacks.LearningRateScheduler(
+    lambda epoch: 1e-8 * 10 ** (epoch / 20)
+)
+
+optimizer = tf.keras.optimizers.SGD(lr = 1e-8, momentum = 0.9)
+
+model.compile(loss = tf.keras.losses.Huber(),
+              optimizer = optimizer,
+              metrics = ["mae"])
+
+history = model.fit(train_set, epochs = 100,
+                    callbacks = [lr_schedule])
+
+
+The Huber function is a loss function that's less sensitive to outliers
+and as this data can get a little bit noisy, it's worth giving it a shot.
+
+https://en.wikipedia.org/wiki/Huber_loss
+
+
+After training, we find that the optimal learning rate is somewhere between 10**(-5)
+and 10**(-6).
+So we set it to 5*10**(-5).
+
+
+tf.keras.backend.clear_session()
+tf.random.set_seed(51)
+np.random.seed(51)
+
+dataset = windowed_dataset(x_train, window_size, batch_size = 128,
+                           shuffle_buffer = shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, axis = -1),
+                           input_shape = [None]),
+    tf.keras.layers.SimpleRNN(40, return_sequences = True),
+    tf.keras.layers.SimpleRNN(40),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 100.0)
+])
+
+optimizer = tf.keras.optimizers.SGD(lr = 5e-5, momentum = 0.9)
+
+history = model.compile(loss = tf.keras.losses.Huber(),
+                        optimizer = optimizer,
+                        metrics = ["mae"])
+
+model.fit(dataset, epochs = 500)
+
+
+After training for 500 epochs, we get an MAE on the validation se of 6.3532376
+
+
+When we look at the charts, we see that after 400 epochs, training became unstable.
+Given this, it's probably worth only training for about 400 epochs.
+
+When we do that, the results are pretty much the same, with the MAE a little bit higher,
+at 6.4141674, but we've saved a 100 epochs worth of training.
+-------------------------------------------------------------------------------------------------
+
+
+## LSTM
+
+[In RNNs] While state is a factor in subsequent calculations, its impact
+can diminish greatly over timestamps.
+
+LSTMs add a cell state to this, that keep a state throughout the life of the
+training so that the state is passed from cell to cell, timestamp to
+timestamp, and it can be better maintained.
+
+This means that data from earlier in the window can have a greater impact on the overall
+projection, than in the case of RNNs.
+
+The state can also be bidirectional, so that state can move forwards and backwards.
+
+
+Refer https://www.coursera.org/lecture/nlp-sequence-models/long-short-term-memory-lstm-KXoay
+--------------------------------------------------------------------------------------------------------
+
+
+## Coding LSTMs
+
+tf.keras.backend.clear_session()
+
+dataset = windowed_dataset(x_train, window_size, batch_size,
+                           shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, axis = -1),
+                           input_shape = [None]),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32)),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 100.0)
+])
+
+model.compile(loss = "mse",
+              optimizer = tf.keras.optimizers.SGD(lr = 1e-6, momentum = 0.9))
+
+model.fit(dataset, epochs = 100,
+          verbose = 0)
+
+
+clear_session() clear any internal variables
+
+That makes it easier to experiment w/o models impacting
+later versions of themselves.
+
+
+The result?
+The plateau under the big spike is still there, and
+MAE = 6.131234
+
+Let's add another LSTM and see the impact.
+
+
+tf.keras.backend.clear_session()
+
+dataset = windowed_dataset(x_train, window_size, batch_size,
+                           shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, axis = -1),
+                           input_shape = [None]),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32, return_sequences = True)),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32)),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 100.0)
+])
+
+model.compile(loss = "mse",
+              optimizer = tf.keras.optimizers.SGD(lr = 1e-6, momentum = 0.9))
+
+model.fit(dataset, epochs = 100,
+          verbose = 0)
+
+
+The result?
+Now it's tracking much better and closer to the original data.
+Maybe not keeping up with the sharp increase, but at least it's tracking close.
+
+MAE = 5.2872233 ==> we're heading in the right direction
+
+Let's add another LSTM layer.
+
+
+tf.keras.backend.clear_session()
+
+dataset = windowed_dataset(x_train, window_size, batch_size,
+                           shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, axis = -1),
+                           input_shape = [None]),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32, return_sequences = True)),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32, return_sequences = True)),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32)),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 100.0)
+])
+
+model.compile(loss = "mse",
+              optimizer = tf.keras.optimizers.SGD(lr = 1e-6, momentum = 0.9))
+
+model.fit(dataset, epochs = 100,
+          verbose = 0)
+
+
+The result?
+There's really not that much of a difference, and our MAE has actually gone down.
+MAE = 5.53239
+---------------------------------------------------------------------------------------------
+
+

@@ -1,0 +1,582 @@
+## Convolutions
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Conv1D(filters = 32, kernel_size = 5,
+                           strides = 1, padding = "causal",
+                           activation = "relu",
+                           input_shape = [None, 1]),
+    tf.keras.layers.LSTM(32, return_sequences = True),
+    tf.keras.layers.LSTM(32, return_sequences = True),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 200)
+])
+
+optimizer = tf.keras.optimizers.SGD(lr = 1e-5, momentum = 0.9)
+ 
+model.compile(loss = tf.keras.losses.Huber(),
+              optimizer = optimizer,
+              metrics = ["mae"])
+
+model.fit(dataset, epochs = 500)
+
+
+Refer https://www.coursera.org/learn/convolutional-neural-networks-tensorflow
+------------------------------------------------------------------------------------------
+
+
+## Bi-directional LSTMs
+
+Notice that we got rid of the Lambda layer which reshaped our inputs to be passed to the LSTM layer.
+
+So, we're actually specifying an input shape on the Conv1D here.
+
+This requires us to update the windowed_dataset function that we've been working with all along.
+
+
+def windowed_dataset(series, window_size, batch_size, shuffle_buffer):
+    series = tf.expand_dims(series, axis = -1)
+    ds = tf.data.Dataset.from_tensor_slices(series)
+    ds = ds.window(window_size + 1, shift = 1,
+                   drop_remainder = True)
+    ds = ds.flat_map(lambda w: w.batch(window_size + 1))
+    ds = ds.shuffle(shuffle_buffer)
+    ds = ds.map(lambda w: (w[:-1], w[-1:]))
+    return ds.batch(batch_size).prefetch(1)
+
+
+We'll simply use tf.expand_dims to expand the dimensions of the series
+before we process it.
+
+When we train this, we find the optimal learning rate to be 10**(-5).
+
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Conv1D(filters = 32, kernel_size = 5,
+                           strides = 1, padding = "causal",
+                           activation = "relu",
+                           input_shape = [None, 1]),
+    tf.keras.layers.LSTM(32, return_sequences = True),
+    tf.keras.layers.LSTM(32, return_sequences = True),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 200)
+])
+
+optimizer = tf.keras.optimizers.SGD(lr = 1e-5, momentum = 0.9)
+
+model.compile(loss = tf.keras.losses.Huber(),
+              optimizer = optimizer,
+              metrics = ["mae"])
+
+model.fit(dataset, epochs = 500)
+
+
+When we plot the graph, it's a huge improvement from earlier.
+
+The peak has lost its plateau, but it's still not quite right.
+
+It's not getting high enough relative to the data.
+
+Now of course, noise is a factor and we can see crazy fluctuations
+in the peak caused by the noise, but I think our model can do better
+than this.
+
+MAE = 4.985901, but I bet outside that first peak, it's a lot lower
+than that.
+
+
+One solution would be to train a little bit longer.
+
+Even though our MAE loss curves look flat at 500 epochs, we can see when
+we zoom in, that they're slowly diminishing.
+
+The network is still learning, albeit slowly.
+
+One method would be to make your LSTMs bidirectional like this.
+
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Conv1D(filters = 32, kernel_size = 5,
+                           strides = 1, padding = "causal",
+                           activation = "relu",
+                           input_shape = [None, 1]),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32, return_sequences = True)),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32, return_sequences = True)),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 200)
+])
+
+
+When training, this looks really good giving very low loss in MAE values,
+sometimes even < 1.
+
+But unfortunately, it's overfitting.
+
+When we plot the predictions against the validation set, we don't see much
+improvement, and in fact our MAE has gone down.
+
+MAE = 6.209801
+
+
+So, it's still a step in the right direction and consider an architecture
+like this one as you go forward, but perhaps you might need to tweak some
+of the parameters to avoid overfitting.
+
+Some of the problems are clearly visualized when we plot the loss against the MAE.
+
+There's a lot of noise and instability in there.
+
+One common causes for small spikes like that is a small batch size
+introducing further random noise.
+
+
+Refer https://www.coursera.org/learn/deep-neural-network
+
+Refer https://www.youtube.com/watch?v=4qJaSmvhxi8
+
+
+One hint was to explore the batch size and to make sure it's appropriate for my data.
+
+So in this case, it's worth experimenting with different batch sizes.
+
+So for example, I experimented with different batch sizes both larger and smaller
+than the original 32, and when I tried 16 ==> MAE = 5.2615495
+---------------------------------------------------------------------------------------------
+
+
+## Real data - sunspots
+
+https://www.kaggle.com/robervalt/sunspots
+
+This dataset from Kaggle, which tracks sunspots on a monthly basis from 1749 until 2018.
+
+Sunspots do have seasonal cycles, approximately every 11 years.
+
+It's a CSV dataset with the 1st column being an index, the 2nd being a date
+in the format year, month, day and the 3rd being the date of that month
+that the measurement was taken.
+
+It's an average monthly amount that should be at the end of that month.
+
+
+One size does not fit all, particularly when it comes to 
+data that has seasonality.
+
+
+!wget --no-check-certificate \
+    https://storage.googleapis.com/laurencemoroney-blog.appspot.com/Sunspots.csv \
+    -O /tmp/sunspots.csv
+
+
+Here's the code to read the CSV file and get its data into a list of
+sunspots and timestamps.
+
+next(reader) reads the first line and throws it away because
+the first line contains the column headers.
+
+
+import csv
+
+time_step = []
+sunspots = []
+
+with open('/tmp/sunspots.csv') as csvfile:
+    reader = csv.reader(csvfile, delimiter = ',')
+    next(reader)
+    for row in reader:
+        sunspots.append(float(row[2]))
+        time_step.append(int(row[0]))
+
+series = np.array(sunspots)
+time = np.array(time_step)
+
+
+When we plot the data, we observe that it has seasonality, but
+it's not very regular with some peaks much higher than others.
+
+We also have quite a bit of noise, but there's no general trend.
+
+
+split_time = 1000
+time_train = time[:split_time]
+x_train = series[:split_time]
+time_valid = time[split_time:]
+x_valid = series[split_time:]
+
+window_size = 20
+batch_size = 32
+shuffle_buffer_size = 1000
+
+
+def windowed_dataset(series, window_size, batch_size, shuffle_buffer):
+    dataset = tf.data.Dataset.from_tensor_slices(series)
+    dataset = dataset.window(window_size + 1, shift = 1,
+                             drop_remainder = True)
+    dataset = dataset.flat_map(lambda window: window.batch(window_size + 1))
+    dataset = dataset.shuffle(shuffle_buffer)
+    dataset = dataset.map(lambda window: (window[:-1], window[-1:]))
+    dataset = dataset.batch(batch_size).prefetch(1)
+    return dataset
+-----------------------------------------------------------------------------------
+
+
+## Train and tune the model
+
+We'll go back to the simple DNN that we saw way back in Week 2 for training on
+and we'll see what happens
+
+
+dataset = windowed_dataset(x_train, window_size, batch_size, shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Dense(10, input_shape = [window_size],
+                          activation = "relu"),
+    tf.keras.layers.Dense(10, activation = "relu"),
+    tf.keras.layers.Dense(1)
+])
+
+model.compile(loss = "mse",
+              optimizer = tf.keras.optimizers.SGD(lr = 1e-6, momentum = 0.9))
+
+model.fit(dataset, epochs = 100, verbose = 1)
+
+
+We get a chart which at least to the eyeball looks really good, but
+has a very large MAE so something must be wrong.
+
+MAE = 19.32425
+
+Indeed, if we zoom into the results we can see in a little bit more detail about
+how the forecast behaves compared to the original data.
+
+
+Our clue to the problem could be our window size.
+It's 20, so our training window sizes are 20 time slices worth of data.
+
+And given that each time slice is a month in real time,
+our window is a little under 2 years.
+
+But we saw in the chart that the seasonality of sunspots is far greater than 2 years.
+It's actually close to 11 years.
+And some science tells us that it might even be 22 years with different cycles
+interleaguing with each other.
+
+
+So what would happen if we retrain with a window size of 132, which is 11 years worth of
+data as our window size?
+
+While the new chart looks similar, we can see from the MAE that it actually got worse,
+so increasing the window size didn't work.
+
+Why do you think that would be?
+
+
+Well, by looking back to the data, we can realize that it's seasonal to about 11 years,
+but we don't need a full season in our window.
+
+Zooming in on to the data again, we'll see something like a typical time series.
+
+Values later on are somewhat related to earlier ones, but there's a lot of noise.
+
+So maybe we don't need a huge window of time in order to train.
+
+Maybe we should go with something like our initial 20, let's try 30.
+
+
+BUt then look at the split_time. The data set has around 3500 items of data, but we're splitting
+it into training and validation at 1000, which means only 1000 for training
+and 2500 for validation.
+
+That's a really bad split, there's not enough training data.
+So let's make it 3000 instead.
+
+
+split_time = 3000
+time_train = time[:split_time]
+x_train = series[:split_time]
+time_valid = time[split_time:]
+x_valid = series[split_time:]
+
+window_size = 30
+batch_size = 32
+shuffle_buffer_size = 1000
+
+
+Our MAE gets improved to 15.1447315, but can we make it even better?
+
+Well, one thing we can try is to edit the neural network design and
+hyperparameters.
+
+If you remember, we had 3 layers of 10, 10 and 1 neurons.
+Our input_shape is now larger at 30.
+
+So, maybe try different values here, like 30, 15 and 1, and retrain.
+
+
+dataset = windowed_dataset(x_train, window_size, batch_size, shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Dense(30, input_shape = [window_size], 
+                          activation = "relu"),
+    tf.keras.layers.Dense(15, activation = "relu"),
+    tf.keras.layers.Dense(1)
+])
+
+model.compile(loss = "mse",
+              optimizer = tf.keras.optimizers.SGD(lr = 1e-6, momentum = 0.9))
+
+model.fit(dataset, epochs = 100, verbose = 1)
+
+
+Surprisingly, this was a small step backwards, with our MAE increasing
+
+MAE = 14.348902
+
+
+It also wasn't worth the extra compute time for the extra neuron layers.
+
+So let's switch back to 10, 10 and 1 and instead look at the learning rate.
+
+Let's tweak it a little and change it to 1e-7.
+
+Now after retraining, I can see my MAE has decreased a bit which is good.
+
+MAE = 14.122419
+------------------------------------------------------------------------------------------
+
+
+## Prediction
+
+Out of interest, let's do a prediction.
+
+The window size I'm using is 30 steps, and the dataset is 3,235 steps long.
+
+So if I want to predict the next value after the end of my dataset,
+I would use this code.
+
+
+model.predict(series[3205:3235][np.newaxis])
+
+
+We got the result 7.0773993
+
+The dataset goes up to July 2018, so we're actually predicting 7.077 sunspots for
+August 2018.
+
+And if we look at this chart of observations, which does have some slightly
+different data from my dataset, I can see that the actual recorded number of sunspots
+in August 2018 was 8.7.
+
+So the prediction isn't too bad, but let's see if we can improve on it.
+
+Refer https://www.sws.bom.gov.au/Solar/1/6
+
+
+split_time = 3000
+window_size = 60
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Dense(20, input_shape = [window_size],
+                          activation = "relu"),
+    tf.keras.layers.Dense(10, activation = "relu"),
+    tf.keras.layers.Dense(1)
+])
+
+model.compile(loss = "mse",
+              optimizer = tf.keras.optimizers.SGD(lr = 1e-7, momentum = 0.9))
+
+
+With these settings, we got the MAE down to 13.75 and
+the prediction was 8.13, which is much closer to the actual
+real reading of 8.7.
+
+There is a random element in creating models, however, so
+your results may vary.
+
+
+Doing accuracy based on a single prediction like this is also a 
+recipe for disappointment, and you're much better off evaluating mean accuracy
+over a number of readings.
+--------------------------------------------------------------------------------------
+
+
+## Sunspots
+
+You should get slightly different values due to the 
+randomness of the model initialization and stochastic gradient descent.
+--------------------------------------------------------------------------------------
+
+
+## Combining our tools for analysis
+
+This is a difficult dataset because like we've seen already,
+while it's seasonal, the period is really long - around 11 years - and it's not
+perfectly seasonable during that period.
+
+
+window_size = 60
+batch_size = 64
+
+train_set = windowed_dataset(x_train, window_size, batch_size,
+                             shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Conv1D(filters = 32, kernel_size =5,
+                           strides = 1, padding = "causal",
+                           activation = "relu",
+                           input_shape = [None, 1]),
+    tf.keras.layers.LSTM(32, return_sequences = True),
+    tf.keras.layers.LSTM(32, return_sequences = True),
+    tf.keras.layers.Dense(30, activation = "relu"),
+    tf.keras.layers.Dense(10, activation = "relu"),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 400)
+])
+
+
+lr_schedule = tf.keras.callbacks.LearningRateScheduler(
+    lambda epoch: 1e-8 * 10 ** (epoch / 20)
+)
+
+optimizer = tf.keras.optimizers.SGD(lr = 1e-8, momentum = 0.9)
+
+model.compile(loss = tf.keras.losses.Huber(),
+              optimizer = optimizer,
+              metrics = ["mae"])
+
+history = model.fit(train_set, epochs = 100,
+                    callbacks = [lr_schedule])
+
+
+We plot the chart and observe that the best learning rate for this model
+will be 10**(-5).
+
+
+optimizer = tf.keras.optimizers.SGD(lr = 1e-5, momentum = 0.9)
+
+
+When we trained the above setup for 500 epochs, we got a graph
+which is pretty good with a nice low MAE.
+
+MAE = 14.456298
+
+But when I look at my loss function during training, I can see
+that there's a lot of noise that I can certainly optimize it a bit
+
+
+One of the best things to look at in these circumstances is the batch_size.
+So we'll increase it to 256 and retrain.
+
+
+train_set = windowed_dataset(x_train, window_size, batch_size = 256,
+                             shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Conv1D(filters = 32, kernel_size =5,
+                           strides = 1, padding = "causal",
+                           activation = "relu",
+                           input_shape = [None, 1]),
+    tf.keras.layers.LSTM(32, return_sequences = True),
+    tf.keras.layers.LSTM(32, return_sequences = True),
+    tf.keras.layers.Dense(30, activation = "relu"),
+    tf.keras.layers.Dense(10, activation = "relu"),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 400)
+])
+
+
+optimizer = tf.keras.optimizers.SGD(lr = 1e-5, momentum = 0.9)
+
+model.compile(loss = tf.keras.losses.Huber(),
+              optimizer = optimizer,
+              metrics = ["mae"])
+
+history = model.fit(train_set, epochs = 500)
+
+
+After 500 epochs, my predictions have improved a little, which is
+a step in the right direction.
+
+MAE = 14.394324
+
+
+But look at my training noise, particularly towards the end of the training,
+it's really noisy but it's a very regular looking wave.
+
+This suggests that my larger batch size was good, but maybe a little off.
+
+It's not catastrophic, because as you can see, the fluctuations are really small,
+but it would be very nice if we could regularize this loss a bit more.
+
+Which then brings me to another thing to try.
+
+
+My training data has 3000 data points in it.
+
+So why are things like my window size, batch size powers of 2
+that aren't necessarily evenly divisible into 3,000?
+
+What would happen if I were to change my parameters to suit.
+
+And not just the window and batch sizes, how about changing the filters too?
+What if I set that to 60?
+And the LSTMs to 60, instead of 32 or 64?
+
+My DNN already look good so I won't change them.
+
+
+train_set = windowed_dataset(x_train, window_size = 60, batch_size = 250,
+                             shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Conv1D(filters = 60, kernel_size =5,
+                           strides = 1, padding = "causal",
+                           activation = "relu",
+                           input_shape = [None, 1]),
+    tf.keras.layers.LSTM(60, return_sequences = True),
+    tf.keras.layers.LSTM(60, return_sequences = True),
+    tf.keras.layers.Dense(30, activation = "relu"),
+    tf.keras.layers.Dense(10, activation = "relu"),
+    tf.keras.layers.Dense(1),
+    tf.keras.layers.Lambda(lambda x: x * 400)
+])
+
+
+optimizer = tf.keras.optimizers.SGD(lr = 1e-5, momentum = 0.9)
+
+model.compile(loss = tf.keras.losses.Huber(),
+              optimizer = optimizer,
+              metrics = ["mae"])
+
+history = model.fit(train_set, epochs = 500)
+
+
+After training this for 500 epochs, my scores improved again
+albeit slightly, so it shows we're heading in the right direction.
+
+MAE = 14.83455
+
+What's interesting is that the noise and the loss function
+actually increased a bit, and that made me want to experiment
+with the batch size again.
+
+
+So I reduced it to just 100 and I got these results:
+
+Here my MAE has actually gone up a little.
+
+The projections are doing much better in the higher peaks than earlier,
+but the overall accuracy has gone down.
+
+And the loss has smoothed out except for a couple of large blips.
+-----------------------------------------------------------------------------------
+
+
+machinelearningmastery.com
+
+Jason Brownlee
+
+https://github.com/jbrownlee/Datasets
+
+https://raw.githubusercontent.com/jbrownlee/Datasets/master/daily-min-temperatures.csv
+

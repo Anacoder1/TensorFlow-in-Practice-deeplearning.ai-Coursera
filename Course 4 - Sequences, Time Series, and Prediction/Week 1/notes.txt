@@ -1,0 +1,264 @@
+Series trend and noise == observed in time series
+
+## Common patterns in time series
+
+1) Trend
+
+Time series have a specific direction that they're moving in.
+
+
+2) Seasonality
+
+Seen when patterns repeat at predictable intervals
+
+
+3) Combination of Trend and Seasonality
+
+Overall upwards/downwards trend, but there are local
+peaks and troughs.
+
+
+4) Random values
+
+White noise
+Can't do much with this type of data
+
+
+5) Autocorrelation
+
+No trend, no seasonality.
+Spikes appear at random timestamps.
+
+You can't predict when they will happen next or how
+strong they will be.
+
+But clearly, the entire series isn't random.
+
+
+Between the spikes, there's a very deterministic type of decay.
+
+E.g. value of each time step = 99% x value of previous time step
+
+v(t) = 0.99 x v(t-1) + occasional spike
+
+==> Autocorrelated time-series.
+
+
+Namely, it correlates with a delayed copy of itself
+often called a lag.
+
+
+Memory --> steps are dependent on previous ones.
+
+Innovations --> spikes, which are often unpredictable
+                (can't be predicted based on past values)
+
+
+Multiple autocorrelations e.g.
+v(t) = 0.7 x v(t-1) + 0.2 x v(t-50) + occasional spike
+
+Here, the lag one autocorrelation gives these very quick short term
+exponential delays, and the 50 gives the small balance after each spike
+
+
+
+Time series encountered in real life often have mix of all features - 
+Trend, Seasonality, Autocorrelation and Noise.
+
+
+--> Non-Stationary Time Series
+
+Time series whose behavior can change drastically over time.
+
+For e.g. a time series having a positive trend and clear seasonality upto
+         timestep 200, but then something happened to change its behavior completely.
+
+         If this were stock price, then maybe it were a big financial crisis, a big scandal,
+         or perhaps a disruptive technological breakthrough causing a 
+         massive change.
+
+         After that, the time series started to trend downward w/o
+         any clear seasonality.
+
+To predict on this time series, we can just train on the last 100 time steps, instead of
+the entire time series.
+
+
+Stationary time series ==> The more data you have, the better
+
+Non-Stationary time series ==> The optimal time window that you should use for training will vary. 
+----------------------------------------------------------------------------------------------------------
+
+
+## Train, validation and test sets
+
+Naive Forecasting ==> Take the last value and assume that the next one will be the same
+
+Fixed Partitioning ==> To train the performance of a model, we split it into training, 
+validation and testing periods.
+
+If the time series contains some seasonality, ensure that each period contains a whole number
+of seasonality e.g. one year, two years, etc (in case of yearly seasonality)
+
+
+Next, you'll train your model on training period, and evaluate it on the validation period.
+
+Here's where you can experiment to find the right architecture for training,
+and work on it, tune the hyperparameters, until you get the desired performance
+measured using the validation set.
+
+Often, you can then retrain on training+validation period, then test on testing period,
+to see if the model will perform just as well.
+
+If it does, you could take the unusual step of retraining with the testing data included,
+because the testing data is the closest data we have to the current point in time.
+
+It's the strongest signal in determining future values.
+
+
+If the model is not trained on that data too, then it may not be optimal.
+
+
+Due to this, it's common to forgo a test period and use only a training and
+validation period.
+
+
+Roll-Forward Partitioning ==>
+We start with a short training period and gradually increase it, say by one day
+at a time, or by one week at a time.
+
+At each iteration, we train the model on a training period, and
+we use it to forecast the following day or following week in the validation period.
+
+You could see it as doing fixed partitioning a number of times, and then continually
+refining the model as such.
+----------------------------------------------------------------------------------------------
+
+
+## Metrics for evaluating performance
+
+Once we have a model and a period, then we can evaluate the model on it and we'll
+need a metric to calculate the performance.
+
+Errors = difference b/w the forecasted values from our model and the actual values
+         over the evaluation period.
+
+
+Most common method to evaluating performance of a model = MSE
+
+MSE = np.square(errors).mean()
+
+We square the errors to remove the negative values.
+
+
+And if we want the mean of our errors calculation to be of the same
+scale as the original errors, then we just get its square root.
+
+RMSE = np.sqrt(mse)
+
+
+MAE / MAD (Mean absolute deviation) = np.abs(errors).mean()
+
+It removes negative values by taking their absolute values.
+
+This does not penalize large negative values as much as MSE does.
+
+
+If large errors are potentially dangerous and they cost you much more
+than smaller errors ==> MSE is preferred.
+
+If your gain / loss is just proportional to the size of the error, 
+then ==> MAE may be better.
+
+
+MAPE (Mean absolute percentage error) == np.abs(errors / x_valid).mean()
+
+It's the mean ratio b/w the absolute error and the absolute value.
+
+This gives an idea of the size of the errors compared to the values.
+
+
+keras.metrics.mean_absolute_error(x_valid, naive_forecast).numpy()
+
+5.9379085..
+--------------------------------------------------------------------------------------
+
+
+## Moving average and differencing
+
+A common and very simple forecasting method is to calculate a moving average.
+
+The yellow line is a plot of the average of the blue values over a fixed period
+called the averaging window (e.g. 30 days)
+
+This nicely eliminates a lot of the noise and it gives us a curve
+roughly eliminating the original series, but it does not anticipate trend or 
+seasonality.
+
+Depending on the current time i.e. the period after which you want to forecast
+for the future, it can actually end up being worse than a naive forecast.
+
+
+Differencing ==>
+One method to avoid this is to remove the trend and seasonality from
+the time series with a technique called differencing.
+
+So instead of studying the time series itself, we study the difference b/w the value
+at time T and the value at an earlier period.
+
+E.g. Series(t) - Series(t-365)
+
+We can then use a moving average to forecast this time series, but these
+will be forecasts for the difference time series, not the original time series.
+
+To get the final forecasts for the original time series, we just need to 
+add back the value at time T-365.
+
+The result of this is a dip in MAE on the validation period.
+The moving average also removes a lot of noise.
+
+
+The 'lot of noise' is coming from past values which we added back into our forecasts.
+
+So we can improve these forecasts by removing the past noise using a moving average on that.
+
+
+If we do that, we get much smoother forecasts.
+
+Simple approaches can sometimes work just fine.
+----------------------------------------------------------------------------------------------------
+
+
+## Trailing versus centered windows
+
+Note that when we use the trailing window when computing the moving average
+of present values from T-30 to T-1.
+
+But when we use a centered window to compute the moving average of past values
+from one year ago, T-1 year-5 days to T-1 year+ 5 days
+
+
+The moving averages using centered windows can be more accurate than
+using trailing windows.
+
+But we can't use centered windows to smooth present values
+since we don't know future values.
+
+
+However, to smooth past values, we can afford to use centered windows.
+------------------------------------------------------------------------------------------------
+
+
+## Forecasting
+
+..All we did was add the raw historic values which are very noisy.
+
+What if instead, we added in the moving average of the historic values,
+so we're effectively using 2 different moving averages?
+
+Using this, our prediction curve is a lot less noisy and the predictions
+are looking pretty good.
+
+Also, the error rate has improved further.
+------------------------------------------------------------------------------------
+

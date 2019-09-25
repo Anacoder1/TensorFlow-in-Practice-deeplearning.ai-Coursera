@@ -1,0 +1,453 @@
+## Preparing features and labels
+
+As with any other ML problem, we have to divide our data
+into features and labels.
+
+In this case, our feature is effectively a number of values in the
+series, with our label being the next value.
+
+We'll call that no. of values that we'll treat as our feature ==> window_size,
+where we're taking a window of the data and training an ML model to
+predict the next value.
+
+
+So for e.g., if we take our time series data, say, 30 days at a time,
+we'll use 30 values as the feature and the next value as the label.
+
+Then, over time, we'll train a neural network to match the 30 features
+to the single label.
+
+
+dataset = tf.data.Dataset.range(10)
+for val in dataset:
+  print(val.numpy())
+
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+
+We'll use the dataset.window to expand our data set using windowing.
+
+Its parameters are the size of the window and how much we want to shift
+by each time.
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift = 1)
+for window_dataset in dataset:
+  for val in window_dataset:
+    print(val.numpy(), end = " ")
+  print()
+
+0 1 2 3 4
+1 2 3 4 5
+2 3 4 5 6
+3 4 5 6 7
+4 5 6 7 8
+5 6 7 8 9
+6 7 8 9
+7 8 9
+8 9
+9
+
+Once we get to the end of the dataset, less values will be printed out
+because they just don't exist.
+
+
+Let's edit our window_size a little bit so that we have regularly sized data.
+
+We can do that with an additional parameter on the window called drop_remainder.
+
+If we set it to True, it will truncate the data by dropping all of the remainders.
+
+Namely, it will only give us a window of 5 items.
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift = 1,
+                         drop_remainder = True)
+for window_dataset in dataset:
+  for val in window_dataset:
+    print(val.numpy(), end = " ")
+  print()
+
+0 1 2 3 4
+1 2 3 4 5
+2 3 4 5 6
+3 4 5 6 7
+4 5 6 7 8
+5 6 7 8 9
+
+
+Now let's put them into numpy lists, so we can start using them with ML.
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift = 1,
+                         drop_remainder = True)
+dataset = dataset.flat_map(lambda window: window.batch(5))
+for window in dataset:
+  print(window.numpy())
+
+[0 1 2 3 4]
+[1 2 3 4 5]
+[2 3 4 5 6]
+[3 4 5 6 7]
+[4 5 6 7 8]
+
+
+Next up is to split the data into features and labels.
+
+For each item in the list, it kind of makes sense to have all 
+of the values but the last one to be the feature, and then the
+last one can be the label.
+
+This can be achieved with mapping.
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift = 1,
+                         drop_remainder = True)
+dataset = dataset.flat_map(lambda window: window.batch(5))
+dataset = dataset.map(lambda window: (window[:-1], window[-1:]))
+for x, y in dataset:
+  print(x.numpy(), y.numpy())
+
+[0 1 2 3] [4]
+[1 2 3 4] [5]
+[2 3 4 5] [6]
+[3 4 5 6] [7]
+[4 5 6 7] [8]
+[5 6 7 8] [9]
+
+
+Typically, you would shuffle your data before training,
+and this is possible using the shuffle method.
+
+We call it with the buffer_size = 10, because that's the
+amount of data items that we have.
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift = 1,
+                         drop_remainder = True)
+dataset = dataset.flat_map(lambda window: window.batch(5))
+dataset = dataset.map(lambda window: (window[:-1], window[-1:]))
+dataset = dataset.shuffle(buffer_size = 10)
+for x, y in dataset:
+  print(x.numpy(), y.numpy())
+
+[3 4 5 6] [7]
+[4 5 6 7] [8]
+[1 2 3 4] [5]
+[2 3 4 5] [6]
+[5 6 7 8] [9]
+[0 1 2 3] [4]
+
+
+Finally, we can look at batching the data, and this is done
+with the batch method
+
+It will take a size parameter (2, here), so it will batch the
+data into sets of 2
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift = 1,
+                         drop_remainder = True)
+dataset = dataset.flat_map(lambda window: window.batch(5))
+dataset = dataset.map(lambda window: (window[:-1], window[-1:]))
+dataset = dataset.shuffle(buffer_size = 10)
+dataset = dataset.batch(2).prefetch(1)
+for x, y in dataset:
+  print("x = ", x.numpy())
+  print("y = ", y.numpy())
+
+x = [[4 5 6 7] [1 2 3 4]]
+y = [[8] [5]]
+x = [[3 4 5 6] [2 3 4 5]]
+y = [[7] [6]]
+x = [[5 6 7 8] [0 1 2 3]]
+y = [[9] [4]]
+------------------------------------------------------------------------------
+
+
+## Sequence bias
+
+Sequence bias is when the order of things can impact the selection of things.
+
+For example, if I were to ask you your favorite TV show, and listed 
+"Game of Thrones", "Killing Eve", "Travellers" and "Doctor Who" in that order,
+you're probably more likely to select "Game of Thrones" as you are familiar with it,
+and it's the first thing you see.
+
+Even if it is equal to the other TV shows.
+
+So, when training data in a dataset, we don't want the sequence to
+impact the training in a similar way, so it's good to shuffle them up.
+-------------------------------------------------------------------------------------
+
+
+## Feeding windowed dataset into neural network
+
+batch_size = The batch size that we want to use for training
+
+If you have a 100,000 elements in your dataset, and set
+shuffle_buffer = 1000, it will just fill the buffer with the
+first thousand elements, picking one at random.
+
+Then it will replace that with the 1001st element before
+randomly picking again, and so on.
+
+
+def windowed_dataset(series, window_size, batch_size, shuffle_buffer):
+  dataset = tf.data.Dataset.from_tensor_slices(series)
+  dataset = dataset.window(window_size + 1, shift = 1,
+                           drop_remainder = True)
+  dataset = dataset.flat_map(lambda window: window.batch(window_size + 1))
+  dataset = dataset.shuffle(shuffle_buffer)
+                   .map(lambda window: (window[:-1], window[-1:]))
+  dataset = dataset.batch(batch_size).prefetch(1)
+  return dataset
+------------------------------------------------------------------------------------
+
+
+## Single layer neural network
+
+Now that we have a windowed dataset, we can start training neural networks with it.
+
+We'll start with a super simple one - Linear regression - measure its accuracy
+and build from there
+
+First, we need to split the data into training and validation sets.
+
+
+split_time = 1000
+time_train = time[:split_time]
+x_train = series[:split_time]
+time_valid = time[split_time:]
+x_valid = series[split_time:]
+
+
+window_size = 20
+batch_size = 32
+shuffle_buffer_size = 1000
+
+dataset = windowed_dataset(series, window_size,
+                           batch_size, shuffle_buffer_size)
+L0 = tf.keras.layers.Dense(1, input_shape = [window_size])
+model = tf.keras.models.Sequential([L0])
+
+
+model.compile(loss = "mse",
+              optimizer = tf.keras.optimizers.SGD(lr = 1e-6, momentum = 0.9))
+model.fit(dataset, epochs = 100,
+          verbose = 1)
+
+
+print("Layer weights {}".format(L0.get_weights())) ==> Inspecting the layer weights
+
+
+The output will contain 2 arrays - the first one containing 20 values,
+and the second one containing 1 value.
+
+The first array can be thought of as the "weights" or "w" in a linear regression equation.
+
+The second array is then the "b value" (bias value or slope) 
+--------------------------------------------------------------------------------------------------
+
+
+## Machine learning on time windows
+
+If we consider the input window to be 20 values wide, then
+lets call them x0, x1, x2..all the way up to x19.
+
+But let's be clear. That's not the value on the horizontal axis
+which is commonly called the x-axis, it's the value of the time
+series at that point on the horizontal axis.
+
+So the value at time T0, which is 20 steps before the current value,
+is called x0.
+
+Similarly, for the output, which we would then consider to be the value
+at the current time to be the "y".
+
+
+I can see the weights for a series which I chose using ==>
+
+print(series[1:21])
+
+
+I can then pass these weight values into the model.predict() method
+for prediction.
+
+The numpy newaxis method just reshapes it to the input dimension,
+that's used by the model.
+
+model.predict(series[1:21][np.newaxis])
+
+
+The output is again 2 arrays - the first being 
+the 20 values that provide the input to our model and
+the bottom is the predicted value back from the model.
+
+
+So if we want to plot our forecasts for every point on the time-series
+relative to the 20 points before it, where our window size was 20,
+we can write code like this
+
+
+forecast = []
+for time in range(len(series) - window_size):
+  forecast.append(model.predict(series[time:time + window_size][np.newaxis]))
+
+forecast = forecast[split_time-window_size : ]
+results = np.array(forecast)[:, 0, 0]
+
+
+We had split our time series into training and testing sets taking everything
+before a certain time as training and the rest as validation.
+
+So we'll just take the forecasts after the split time
+and load them into a NumPy array for charting.
+
+
+The actual values in the graph are in blue, and the
+predicted ones are in orange.
+
+
+tf.keras.metrics.mean_absolute_error(x_valid, results).numpy()
+
+4.9526777
+-----------------------------------------------------------------------------------------
+
+
+## Deep neural network training, tuning and prediction
+
+dataset = windowed_dataset(x_train, window_size, batch_size,
+                           shuffle_buffer_size)
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(10, input_shape = [window_size],
+                          activation = "relu"),
+    tf.keras.layers.Dense(10, activation = "relu"),
+    tf.keras.layers.Dense(1)
+])
+
+model.compile(loss = "mse",
+              optimizer = tf.keras.optimizers.SGD(lr = 1e-6, momentum = 0.9))
+
+model.fit(dataset, epochs = 100,
+          verbose = 0)
+
+
+tf.keras.metrics.mean_absolute_error(x_valid, results).numpy()
+
+4.9833784
+
+
+It would be nice if we could use a optimizer having an optimal learning rate, and
+other optimal parameters.
+
+For that, we can use Callbacks, and LearningRateScheduler.
+
+This will be called as the callback at the end of each epoch.
+
+What it will do is change the learning rates to a value based on the epoch number.
+
+
+dataset = windowed_dataset(x_train, window_size, batch_size,
+                           shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Dense(10, input_shape = [window_size], activation = "relu"),
+    tf.keras.layers.Dense(10, activation = "relu"),
+    tf.keras.layers.Dense(1)
+])
+
+lr_schedule = tf.keras.callbacks.LearningRateScheduler(
+    lambda epoch: 1e-8 * 10**(epoch / 20))
+
+optimizer = tf.keras.optimizers.SGD(lr = 1e-8, momentum = 0.9)
+
+model.compile(loss = "mse",
+              optimizer = optimizer)
+
+history = model.fit(dataset, epochs = 100,
+                    callbacks = [lr_schedule])
+
+
+
+We can then plot the loss per epoch against the learning rate per epoch.
+
+The y-axis shows us the loss for that epoch and the x-axis shows us the learning rate.
+
+lrs = 1e-8 * (10 ** (np.arange(100) / 20))
+plt.semilogx(lrs, history.history["loss"])
+plt.axis([1e-8, 1e-3, 0, 300])
+
+
+We can then try to pick the lowest point of the curve where it's still relatively stable,
+e.g. 7 times 10 to the power -6.
+
+Let's set that to be our learning rate and then we'll retrain.
+
+
+window_size = 30
+dataset = windowed_dataset(x_train, window_size, batch_size,
+                           shuffle_buffer_size)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Dense(10, activation = "relu", 
+                          input_shape = [window_size]),
+    tf.keras.layers.Dense(10, activation = "relu"),
+    tf.keras.layers.Dense(1)
+])
+
+optimizer = tf.keras.optimizers.SGD(lr = 7e-6, momentum = 0.9)
+model.compile(loss = "mse", optimizer = optimizer)
+history = model.fit(dataset, epochs = 500)
+
+
+Here's the code to plot out the loss that was calculated during the
+training.
+
+loss = history.history["loss"]
+epochs = range(len(acc))
+plt.plot(epochs, loss, 'b',
+         label = 'Training Loss')
+plt.show()
+
+
+We're probably wasting our time training beyond epoch no. 10
+
+But the loss for earlier epochs was very high.
+
+If we cropped them off and plot the loss for epochs after number 10,
+then the chart will tell us a different story
+
+
+#Plot all but the first 10
+loss = history.history['loss']
+epochs = range(10, len(acc))
+plot_loss = loss[10:]
+print(plot_loss)
+plt.plot(epochs, plot_loss, 'b', label = 'Training Loss')
+plt.show()
+
+
+We can see that the loss was continuing to decrease even after 500 epochs.
+
+
+tf.keras.metrics.mean_absolute_error(x_valid, results).numpy()
+
+4.4847784
+
+
+In a time series like this, the values that are immediately before a value
+are more likely to impact it than those further in the past.
+
+That's the perfect set up to use RNNs.
+-----------------------------------------------------------------------------------------
