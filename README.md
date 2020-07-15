@@ -1,4 +1,4 @@
-# TensorFlow-in-Practice-deeplearning.ai-Coursera
+# TensorFlow in Practice Specialization, deeplearning.ai @ Coursera
 Contains notes, codes, anwers to quizzes and exercises of all the 4 courses of the [TensorFlow in Practice specialization](https://www.coursera.org/specializations/tensorflow-in-practice?), by deeplearning.ai
 
 ## Course 1: Introduction to TensorFlow for Artificial Intelligence, Machine Learning, and Deep Learning
@@ -9,7 +9,7 @@ Contains notes, codes, anwers to quizzes and exercises of all the 4 courses of t
 
 ➥ [Week 3: Enhancing Vision with Convolutional Neural Networks][3]
 
-➥ [Week 4: Using Real-world Images][4]
+➥ [Week 4: Using Real-world Images][4]<br><br>
 
 ## Course 2: Convolutional Neural Networks in TensorFlow
 
@@ -19,7 +19,7 @@ Contains notes, codes, anwers to quizzes and exercises of all the 4 courses of t
 
 ➥ [Week 3: Transfer Learning][7]
 
-➥ [Week 4: Multiclass Classifications][8]
+➥ [Week 4: Multiclass Classifications][8]<br><br>
 
 ## Course 3: Natural Language Processing in TensorFlow
 
@@ -29,7 +29,7 @@ Contains notes, codes, anwers to quizzes and exercises of all the 4 courses of t
 
 ➥ [Week 3: Sequence Models][11]
 
-➥ [Week 4: Sequence Models and literature][12]
+➥ [Week 4: Sequence Models and literature][12]<br><br>
 
 ## Course 4: Sequences, Time Series and Prediction
 
@@ -57,3 +57,5 @@ Contains notes, codes, anwers to quizzes and exercises of all the 4 courses of t
 [14]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%204%20-%20Sequences%2C%20Time%20Series%2C%20and%20Prediction/Week%202
 [15]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%204%20-%20Sequences%2C%20Time%20Series%2C%20and%20Prediction/Week%203
 [16]: https://github.com/Anacoder1/TensorFlow-in-Practice-deeplearning.ai-Coursera/tree/master/Course%204%20-%20Sequences%2C%20Time%20Series%2C%20and%20Prediction/Week%204
+
+***
